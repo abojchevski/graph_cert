@@ -17,7 +17,7 @@ Please cite our paper if you use this code in your own work:
 
 ```
 @inproceedings{bojchevski2019adversarial,
-  title =      {Adversarial Attacks on Node Embeddings via Graph Poisoning},
+  title =      {Certifiable Robustness to Graph Perturbations},
   author =     {Aleksandar Bojchevski and Stephan G{\"{u}}nnemann},
   booktitle =  {Neural Information Processing Systems, {NeurIPS}},
   year =       {2019},
