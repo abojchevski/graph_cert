@@ -1,2 +1,25 @@
-# graph_cert
-Certifiable Robustness to Graph Perturbations
+# Certifiable Robustness to Graph Perturbations
+
+<p align="center">
+<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/graph_cert/graph_cert.png">
+</p>
+
+Preliminary reference implementation.
+
+## Requirements
+* numpy
+* scipy
+* numba
+* cvxpy 
+
+## Cite
+Please cite our paper if you use this code in your own work:
+
+```
+@inproceedings{bojchevski2019adversarial,
+  title =      {Adversarial Attacks on Node Embeddings via Graph Poisoning},
+  author =     {Aleksandar Bojchevski and Stephan G{\"{u}}nnemann},
+  booktitle =  {Neural Information Processing Systems, {NeurIPS}},
+  year =       {2019},
+}
+```
