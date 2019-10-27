@@ -5,7 +5,6 @@ Aleksandar Bojchevski and Stephan Günnemann, NeurIPS 2019
 
 Copyright (C) owned by the authors, 2019
 """
-import gust
 import numba
 import numpy as np
 import scipy.sparse as sp
@@ -145,14 +144,14 @@ def correction_term(adj, opt_fragile, fragile):
     """
     n = adj.shape[0]
     if len(opt_fragile) > 0:
-        adj_all = adj + gust.edges_to_sparse(fragile, n)
+        adj_all = adj + edges_to_sparse(fragile, n)
         adj_all[adj_all != 0] = 1
         deg_all = adj_all.sum(1).A1
 
-        g_chosen = gust.edges_to_sparse(opt_fragile, n, 1 - 2 * adj[opt_fragile[:, 0], opt_fragile[:, 1]].A1)
+        g_chosen = edges_to_sparse(opt_fragile, n, 1 - 2 * adj[opt_fragile[:, 0], opt_fragile[:, 1]].A1)
         n_removed = -g_chosen.multiply(g_chosen == -1).sum(1).A1
         n_added = g_chosen.multiply(g_chosen == 1).sum(1).A1
-        n_to_add = gust.edges_to_sparse(fragile, n, 1 - adj[fragile[:, 0], fragile[:, 1]].A1).sum(1).A1
+        n_to_add = edges_to_sparse(fragile, n, 1 - adj[fragile[:, 0], fragile[:, 1]].A1).sum(1).A1
         correction = 1 - (n_removed + (n_to_add - n_added)) / deg_all
     else:
         correction = np.ones(n)
@@ -187,3 +186,21 @@ def topic_sensitive_pagerank(adj, alpha, teleport):
     ppr = sp.linalg.gmres(sp.eye(n) - alpha * trans.T, teleport)[0] * (1 - alpha)
 
     return ppr
+
+
+def edges_to_sparse(edges, num_nodes, weights=None):
+    """Create a sparse adjacency matrix from an array of edge indices and (optionally) values.
+
+    :param edges: array-like, shape [num_edges, 2]
+        Array with each row storing indices of an edge as (u, v).
+    :param num_nodes: int
+        Number of nodes in the resulting graph.
+    :param weights: array_like, shape [num_edges], optional, default None
+        Weights of the edges. If None, all edges weights are set to 1.
+    :return: sp.csr_matrix
+        Adjacency matrix in CSR format.
+    """
+    if weights is None:
+        weights = np.ones(edges.shape[0])
+
+    return sp.coo_matrix((weights, (edges[:, 0], edges[:, 1])), shape=(num_nodes, num_nodes)).tocsr()
