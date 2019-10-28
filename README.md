@@ -16,7 +16,7 @@ Preliminary reference implementation.
 Please cite our paper if you use this code in your own work:
 
 ```
-@inproceedings{bojchevski2019adversarial,
+@inproceedings{bojchevski2019certifiable,
   title =      {Certifiable Robustness to Graph Perturbations},
   author =     {Aleksandar Bojchevski and Stephan G{\"{u}}nnemann},
   booktitle =  {Neural Information Processing Systems, {NeurIPS}},
