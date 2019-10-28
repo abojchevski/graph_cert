@@ -23,6 +23,3 @@ Please cite our paper if you use this code in your own work:
   year =       {2019},
 }
 ```
-<p align="center">
-<img src="https://www.kdd.in.tum.de/fileadmin/w00bxq/www/graph_cert/graph_cert.png">
-</p>
