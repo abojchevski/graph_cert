@@ -294,7 +294,6 @@ def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_paralle
     -------
     upper_bounds: np.ndarray, shape [n]
         Computed upper bounds.
-
     """
 
     n = adj.shape[0]
@@ -306,39 +305,93 @@ def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_paralle
         upper_bounds = np.column_stack(results)
     else:
         upper_bounds = np.zeros((n, n))
-        for target in trange:
+        for target in range(n):
             upper_bounds[:, target] = upper_bounds_max_ppr_target(
                 adj=adj, alpha=alpha, fragile=fragile, local_budget=local_budget, target=target)
 
     return upper_bounds
 
 
-def worst_margin_local(adj, alpha, fragile, budget, logits, true_class, other_class):
+def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, other_class):
+    """
+    Computes the worst margin and the optimal edges to perturb between any two classes given a graph, a set of fragile
+    edges and local budgets per node, i.e. it solve min_g [(pi_g)^T (logits_true_class - logits_other_class)].
+
+    Runs the policy iteration algorithm using only local budget.
+
+    Parameters
+    ----------
+    adj : sp.spmatrix, shape [n, n]
+        Sparse adjacency matrix.
+    alpha : float
+        (1-alpha) teleport[v] is the probability to teleport to node v.
+    fragile : np.ndarray, shape [?, 2]
+        Fragile edges that are under our control.
+    local_budget : np.ndarray, shape [n]
+        Maximum number of local flips per node.
+    logits : np.ndarray, shape [n, k]
+        A matrix of logits. Each row corresponds to one node.
+    true_class : int
+        The reference class, i.e. y_t in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+    other_class : int
+        The other class, i.e. c in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+
+    Returns
+    -------
+    true_class : int
+        The reference class, i.e. y_t in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+    other_class : int
+        The other class, i.e. c in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+    ppr_flipped : np.ndarray, shape [n, n]
+        The PageRank matrix corresponding to the optimal perturbed graph.
+    opt_fragile : np.ndarray, shape [?, 2]
+        Optimal fragile edges.
+    """
     # min(true - other_class) = -max(other_class-true_class)
-    # therefore multiply the final result by -1
     reward = logits[:, other_class] - logits[:, true_class]
 
-    # pick any teleport vector
+    # pick any teleport vector since the optimal fragile edges do not depend on it
     teleport = np.zeros_like(reward)
     teleport[0] = 1
 
     opt_fragile, obj_value = policy_iteration(
-        adj=adj, alpha=alpha, fragile=fragile, local_budget=budget, reward=reward, teleport=teleport)
+        adj=adj, alpha=alpha, fragile=fragile, local_budget=local_budget, reward=reward, teleport=teleport)
 
+    # constructed the graph perturbed with the optimal fragile edges
     adj_flipped = flip_edges(adj, opt_fragile)
+    # compute the PageRank matrix
     ppr_flipped = propagation_matrix(adj=adj_flipped, alpha=alpha)
 
-    return true_class, other_class, -obj_value, ppr_flipped, opt_fragile
+    return true_class, other_class, ppr_flipped, opt_fragile
 
 
 def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
+    """
+    Computes the worst margin and the optimal edges to perturb for all K x K pairs of classes, since we can recover
+    the exact worst-case margins for all node via the PageRank matrix of the perturbed graphs. See section 4.3. in the
+    paper for more details.
+
+    Parameters
+    ----------
+    adj : sp.spmatrix, shape [n, n]
+        Sparse adjacency matrix.
+    alpha : float
+        (1-alpha) teleport[v] is the probability to teleport to node v.
+    fragile : np.ndarray, shape [?, 2]
+        Fragile edges that are under our control.
+    local_budget : np.ndarray, shape [n]
+        Maximum number of local flips per node.
+    logits : np.ndarray, shape [n, k]
+        A matrix of logits. Each row corresponds to one node.
+
+    Returns
+    -------
+    k_squared_pageranks : dict(int, int) = np.ndarray, shape [n, n]
+        Dictionary containing the PageRank matrices of the perturbed graphs for all k x k paris of classes.
+    """
     parallel = Parallel(20)
 
     n, nc = logits.shape
-
-    # any teleport vector can be used
-    teleport = np.zeros(n)
-    teleport[0] = 1
 
     results = parallel(delayed(worst_margin_local)(
         adj, alpha, fragile, local_budget, logits, c1, c2)
@@ -346,26 +399,40 @@ def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
                        for c2 in range(nc)
                        if c1 != c2)
 
-    results_dict = {}
+    k_squared_pageranks = {}
     for c1, c2, _, ppr_flipped, _ in results:
-        results_dict[(c1, c2)] = {'ppr': ppr_flipped}
+        k_squared_pageranks[(c1, c2)] = {'ppr': ppr_flipped}
 
-    return results_dict
+    return k_squared_pageranks
 
 
-def worst_margins_given_k_squared(k_squared, labels, logits):
+def worst_margins_given_k_squared(k_squared_pageranks, labels, logits):
+    """
+    Computes the exact worst-case margins for all node via the PageRank matrix of the perturbed graphs.
+
+    Parameters
+    ----------
+    k_squared_pageranks : dict(int, int) = np.ndarray, shape [n, n]
+        Dictionary containing the PageRank matrices of the perturbed graphs for all k x k paris of classes.
+    labels : np.ndarray, shape [n]
+        The label w.r.t. which we are computing the certificate for each node, i.e. ground_truth or predicted.
+    logits : np.ndarray, shape [n, k]
+        A matrix of logits. Each row corresponds to one node.
+
+    Returns
+    -------
+    worst_margins : np.ndarray, shape [n]
+        The value of the worst-case margin for each node.
+    """
     n, nc = logits.shape
     worst_margins_all = np.ones((nc, nc, n)) * np.inf
-    worst_pprs_all = np.zeros((nc, nc, n, n))
 
     for c1 in range(nc):
         for c2 in range(nc):
             if c1 != c2:
-                worst_pprs_all[c1, c2] = k_squared[c1, c2]['ppr']
-                worst_margins_all[c1, c2] = (k_squared[c1, c2]['ppr'] @ (logits[:, c1] - logits[:, c2]))
+                worst_margins_all[c1, c2] = (k_squared_pageranks[c1, c2]['ppr'] @ (logits[:, c1] - logits[:, c2]))
 
+    # selected the reference label according to the labels vector and find the minimum among all other classes
     worst_margins = np.nanmin(worst_margins_all[labels, :, np.arange(n)], 1)
-    # worst_classes = np.nanargmin(worst_margins_all[labels, :, np.arange(n)], 1)
-    # worst_pprs = worst_pprs_all[labels, worst_classes, np.arange(n)]
 
-    return worst_margins, worst_pprs_all, worst_margins_all
+    return worst_margins
