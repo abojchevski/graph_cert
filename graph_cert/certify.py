@@ -436,3 +436,62 @@ def worst_margins_given_k_squared(k_squared_pageranks, labels, logits):
     worst_margins = np.nanmin(worst_margins_all[labels, :, np.arange(n)], 1)
 
     return worst_margins
+
+
+def certify_single_node_local(adj, alpha, fragile, local_budget, logits, true_class, target):
+    """
+    Computes the certificate for a single node.
+
+    Note that if we want to compute the certificate for multiple nodes it is more efficient to first call
+    "k_squared_parallel" and then pass the results to "worst_margins_given_k_squared".
+
+    Parameters
+    ----------
+    adj : sp.spmatrix, shape [n, n]
+        Sparse adjacency matrix.
+    alpha : float
+        (1-alpha) teleport[v] is the probability to teleport to node v.
+    fragile : np.ndarray, shape [?, 2]
+        Fragile edges that are under our control.
+    local_budget : np.ndarray, shape [n]
+        Maximum number of local flips per node.
+    logits : np.ndarray, shape [n, k]
+        A matrix of logits. Each row corresponds to one node.
+    true_class : int
+        The reference class, i.e. y_t in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+    target : int
+        The node we want to certify.
+
+    Returns
+    -------
+    worst_margin : float
+        The value of the worst-case margin.
+        The node is certifiably robust if this is positive. Otherwise we have found an adversarial example.
+    opt_fragile : np.ndarray, shape [?, 2]
+        Optimal fragile edges.
+    """
+
+    worst_margin_overall = np.inf
+    opt_fragile_overall = None
+
+    nc = logits.shape[1]
+
+    # iterate over all other classes
+    for other_class in range(nc):
+        if other_class != true_class:
+            # min(true - other_class) = -max(other_class-true_class)
+            reward = logits[:, other_class] - logits[:, true_class]
+
+            # set teleport vector to the target node
+            teleport = np.zeros_like(reward)
+            teleport[target] = 1
+
+            opt_fragile, obj_value = policy_iteration(
+                adj=adj, alpha=alpha, fragile=fragile, local_budget=local_budget, reward=reward, teleport=teleport)
+            # multiply by -1 since policy_iteration does maximization and we care about minimization
+            worst_margin = -obj_value
+            if worst_margin < worst_margin_overall:
+                worst_margin_overall = worst_margin
+                opt_fragile_overall = opt_fragile
+
+    return worst_margin_overall, opt_fragile_overall
