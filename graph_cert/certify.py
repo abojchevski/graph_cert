@@ -5,7 +5,6 @@ Aleksandar Bojchevski and Stephan Günnemann, NeurIPS 2019
 
 Copyright (C) owned by the authors, 2019
 """
-import tqdm
 import gust
 import numpy as np
 import cvxpy as cp
@@ -274,7 +273,7 @@ def upper_bounds_max_ppr_target(adj, alpha, fragile, local_budget, target):
     return upper_bounds
 
 
-def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_parallel=True, verbose=False):
+def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_parallel=True):
     """
     Computes the upper bounds needed for QCLP for all nodes at once.
 
@@ -290,8 +289,6 @@ def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_paralle
         Maximum number of local flips per node.
     do_parallel : bool
         Parallel
-    verbose : bool
-        Verbosity.
 
     Returns
     -------
@@ -301,15 +298,11 @@ def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_paralle
     """
 
     n = adj.shape[0]
-    if verbose:
-        trange = tqdm.tqdm(range(n))
-    else:
-        trange = range(n)
 
     if do_parallel:
         parallel = Parallel(20)
         results = parallel(delayed(upper_bounds_max_ppr_target)(adj, alpha, fragile, local_budget, target)
-                           for target in trange)
+                           for target in range(n))
         upper_bounds = np.column_stack(results)
     else:
         upper_bounds = np.zeros((n, n))
@@ -349,8 +342,9 @@ def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
 
     results = parallel(delayed(worst_margin_local)(
         adj, alpha, fragile, local_budget, logits, c1, c2)
-                       for c1 in tqdm.tqdm(range(nc))
-                       for c2 in tqdm.tqdm(range(nc)) if c1 != c2)
+                       for c1 in range(nc)
+                       for c2 in range(nc)
+                       if c1 != c2)
 
     results_dict = {}
     for c1, c2, _, ppr_flipped, _ in results:
