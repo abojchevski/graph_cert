@@ -240,3 +240,86 @@ def get_fragile(adj, threat_model):
         raise ValueError('threat_model not set correctly.')
 
     return fragile
+
+
+def load_dataset(file_name):
+    """
+    Load a graph from a Numpy binary file.
+
+    Parameters
+    ----------
+    file_name : str
+        Name of the file to load.
+
+    Returns
+    -------
+    graph : dict
+        Dictionary that contains:
+            * 'A' : The adjacency matrix in sparse matrix format
+            * 'X' : The attribute matrix in sparse matrix format
+            * 'z' : The ground truth class labels
+            * Further dictionaries mapping node, class and attribute IDs
+
+    """
+
+    if not file_name.endswith('.npz'):
+        file_name += '.npz'
+    with np.load(file_name, allow_pickle=True) as loader:
+        loader = dict(loader)
+        adj_matrix = sp.csr_matrix((loader['adj_data'], loader['adj_indices'],
+                                    loader['adj_indptr']), shape=loader['adj_shape'])
+
+        labels = loader.get('labels')
+
+        graph = {
+            'adj_matrix': adj_matrix,
+            'labels': labels
+        }
+
+        idx_to_node = loader.get('idx_to_node')
+        if idx_to_node:
+            idx_to_node = idx_to_node.tolist()
+            graph['idx_to_node'] = idx_to_node
+
+        idx_to_attr = loader.get('idx_to_attr')
+        if idx_to_attr:
+            idx_to_attr = idx_to_attr.tolist()
+            graph['idx_to_attr'] = idx_to_attr
+
+        idx_to_class = loader.get('idx_to_class')
+        if idx_to_class:
+            idx_to_class = idx_to_class.tolist()
+            graph['idx_to_class'] = idx_to_class
+
+        return graph
+
+
+def standardize(adj_matrix, labels):
+    """
+     Make the graph undirected and select only the nodes belonging to the largest connected component.
+    Parameters
+    ----------
+    adj_matrix : sp.spmatrix
+        Sparse adjacency matrix
+    labels : array-like, shape [n]
+        Node labels.
+
+    Returns
+    -------
+    standardized_adj_matrix: sp.spmatrix
+        Standardized sparse adjacency matrix.
+    standardized_labels: array-like, shape [?]
+        Labels for the selected nodes.
+    """
+    # make the graph undirected
+    adj_matrix = adj_matrix.maximum(adj_matrix.T)
+
+    # select the largest connected component
+    _, components = sp.csgraph.connected_components(adj_matrix)
+    c_ids, c_counts = np.unique(components, return_counts=True)
+    id_max_component = c_ids[c_counts.argmax()]
+    select = components == id_max_component
+    standardized_adj_matrix = adj_matrix[select][:, select]
+    standardized_labels = labels[select]
+
+    return standardized_adj_matrix, standardized_labels

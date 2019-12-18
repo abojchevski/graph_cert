@@ -344,8 +344,6 @@ def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, ot
         The other class, i.e. c in m^*_{y_t, c}(t) (see Eq.3 in the paper)
     ppr_flipped : np.ndarray, shape [n, n]
         The PageRank matrix corresponding to the optimal perturbed graph.
-    opt_fragile : np.ndarray, shape [?, 2]
-        Optimal fragile edges.
     """
     # min(true - other_class) = -max(other_class-true_class)
     reward = logits[:, other_class] - logits[:, true_class]
@@ -362,7 +360,7 @@ def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, ot
     # compute the PageRank matrix
     ppr_flipped = propagation_matrix(adj=adj_flipped, alpha=alpha)
 
-    return true_class, other_class, ppr_flipped, opt_fragile
+    return true_class, other_class, ppr_flipped
 
 
 def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
@@ -400,7 +398,7 @@ def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
                        if c1 != c2)
 
     k_squared_pageranks = {}
-    for c1, c2, _, ppr_flipped, _ in results:
+    for c1, c2, ppr_flipped in results:
         k_squared_pageranks[(c1, c2)] = {'ppr': ppr_flipped}
 
     return k_squared_pageranks
