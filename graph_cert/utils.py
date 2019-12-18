@@ -204,3 +204,41 @@ def edges_to_sparse(edges, num_nodes, weights=None):
         weights = np.ones(edges.shape[0])
 
     return sp.coo_matrix((weights, (edges[:, 0], edges[:, 1])), shape=(num_nodes, num_nodes)).tocsr()
+
+
+def get_fragile(adj, addrem):
+    """
+    Generate a set of fragile edges corresponding to different threat models and scenarios.
+
+    Parameters
+    ----------
+    adj : sp.spmatrix, shape [n, n]
+        Sparse adjacency matrix.
+    addrem : string
+        'rem' specifies an attacker that can only remove edges, i.e. fragile edges are existing edges in the graph,
+        'addrem' specifies an attacker that can both add and remove edges.
+    both_dir : bool
+        Whether to make both directions (i, j) and (j, i) fragile.
+
+    Returns
+    -------
+    fragile : np.ndarray, shape [?, 2]
+        Set of fragile edges.
+    """
+    n = adj.shape[0]
+
+    mst = sp.csgraph.minimum_spanning_tree(adj)
+    mst = mst + mst.T
+
+    if addrem == 'rem':
+        fragile = np.column_stack((adj - mst).nonzero())
+    elif addrem == 'addrem':
+        fragile_rem = np.column_stack((adj - mst).nonzero())
+        fragile_add = np.column_stack(np.ones((n, n)).nonzero())
+        fragile_add = fragile_add[adj[fragile_add[:, 0], fragile_add[:, 1]].A1 == 0]
+        fragile_add = fragile_add[fragile_add[:, 0] != fragile_add[:, 1]]
+        fragile = np.row_stack((fragile_add, fragile_rem))
+    else:
+        raise ValueError('addrem not set correctly.')
+
+    return fragile
