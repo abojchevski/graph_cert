@@ -12,6 +12,9 @@ Preliminary reference implementation.
 * numba
 * cvxpy 
 
+## Demo
+See the notebook `Local Budget Demo.ipynb` for a demo on how to compute the certificate for local budget only. 
+
 ## Cite
 Please cite our paper if you use this code in your own work:
 
