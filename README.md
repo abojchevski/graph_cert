@@ -1,7 +1,7 @@
 # Certifiable Robustness to Graph Perturbations
 
 <p align="center">
-<img src="https://www.in.tum.de/fileadmin/w00bws/daml/graph_cert/graph_cert_overview.png">
+<img src="https://www.in.tum.de/fileadmin/w00bws/daml/node_attack/node_attack.png">
 </p>
 
 Preliminary reference implementation.
