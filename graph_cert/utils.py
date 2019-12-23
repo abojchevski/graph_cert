@@ -311,15 +311,28 @@ def standardize(adj_matrix, labels):
     standardized_labels: array-like, shape [?]
         Labels for the selected nodes.
     """
+    # copy the input
+    standardized_adj_matrix = adj_matrix.copy()
+
+    # make the graph unweighted
+    standardized_adj_matrix[standardized_adj_matrix != 0] = 1
+
     # make the graph undirected
-    adj_matrix = adj_matrix.maximum(adj_matrix.T)
+    standardized_adj_matrix = standardized_adj_matrix.maximum(standardized_adj_matrix.T)
 
     # select the largest connected component
-    _, components = sp.csgraph.connected_components(adj_matrix)
+    _, components = sp.csgraph.connected_components(standardized_adj_matrix)
     c_ids, c_counts = np.unique(components, return_counts=True)
     id_max_component = c_ids[c_counts.argmax()]
     select = components == id_max_component
-    standardized_adj_matrix = adj_matrix[select][:, select]
+    standardized_adj_matrix = standardized_adj_matrix[select][:, select]
     standardized_labels = labels[select]
 
+    # remove self-loops
+    standardized_adj_matrix = standardized_adj_matrix.tolil()
+    standardized_adj_matrix.setdiag(0)
+    standardized_adj_matrix = standardized_adj_matrix.tocsr()
+    standardized_adj_matrix.eliminate_zeros()
+
     return standardized_adj_matrix, standardized_labels
+
