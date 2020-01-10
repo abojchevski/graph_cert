@@ -5,10 +5,10 @@ Aleksandar Bojchevski and Stephan Günnemann, NeurIPS 2019
 
 Copyright (C) owned by the authors, 2019
 """
-import gust
 import numpy as np
 import cvxpy as cp
 import scipy.sparse as sp
+from scipy.sparse.linalg import gmres
 
 import warnings
 from joblib import Parallel, delayed
@@ -62,7 +62,7 @@ def policy_iteration(adj, alpha, fragile, local_budget, reward, teleport, max_it
 
         # compute the mean reward before teleportation
         trans_flipped = sp.diags(1 / adj_flipped.sum(1).A1) @ adj_flipped
-        mean_reward = sp.linalg.gmres(sp.eye(n) - alpha * trans_flipped, reward)[0]
+        mean_reward = gmres(sp.eye(n) - alpha * trans_flipped, reward)[0]
 
         # compute the change in the mean reward
         vi = mean_reward[fragile[:, 0]]
@@ -76,7 +76,7 @@ def policy_iteration(adj, alpha, fragile, local_budget, reward, teleport, max_it
 
         # only consider the ones that improve our objective function
         improve = change > 0
-        frag = gust.edges_to_sparse(fragile[improve], n, change[improve])
+        frag = edges_to_sparse(fragile[improve], n, change[improve])
         # select the top_k fragile edges
         cur_fragile = top_k_numba(frag, local_budget)
 
@@ -84,7 +84,7 @@ def policy_iteration(adj, alpha, fragile, local_budget, reward, teleport, max_it
         cur_obj_value = mean_reward @ teleport * (1 - alpha)
 
         # check for convergence
-        edges_are_same = (gust.edges_to_sparse(prev_fragile, n) - gust.edges_to_sparse(cur_fragile, n)).nnz == 0
+        edges_are_same = (edges_to_sparse(prev_fragile, n) - edges_to_sparse(cur_fragile, n)).nnz == 0
         if edges_are_same or np.isclose(max_obj_value, cur_obj_value):
             break
         else:
@@ -265,7 +265,7 @@ def upper_bounds_max_ppr_target(adj, alpha, fragile, local_budget, target):
     # gets one column from the PPR matrix
     # corresponds to the PageRank score value of target for any teleport vector (any row)
     pre_inv = sp.eye(n) - alpha * sp.diags(1 / adj_flipped.sum(1).A1) @ adj_flipped
-    ppr = (1 - alpha) * sp.linalg.gmres(pre_inv, z)[0]
+    ppr = (1 - alpha) * gmres(pre_inv, z)[0]
 
     correction = correction_term(adj, opt_fragile, fragile)
 
