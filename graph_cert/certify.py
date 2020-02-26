@@ -217,10 +217,9 @@ def relaxed_qclp(adj, alpha, fragile, local_budget, reward, teleport, global_bud
                           'Solving using only local budget.')
         global_constraint = []
 
-    print(x.shape, A.shape, b.shape)
     prob = cp.Problem(objective=cp.Maximize(c * x),
                       constraints=[x * A == b] + budget_constraints + global_constraint)
-    prob.solve(solver='GUROBI', verbose=True)
+    prob.solve(solver='GUROBI', verbose=False)
 
     assert prob.status == 'optimal'
 
@@ -487,6 +486,67 @@ def certify_single_node_local(adj, alpha, fragile, local_budget, logits, true_cl
             opt_fragile, obj_value = policy_iteration(
                 adj=adj, alpha=alpha, fragile=fragile, local_budget=local_budget, reward=reward, teleport=teleport)
             # multiply by -1 since policy_iteration does maximization and we care about minimization
+            worst_margin = -obj_value
+            if worst_margin < worst_margin_overall:
+                worst_margin_overall = worst_margin
+                opt_fragile_overall = opt_fragile
+
+    return worst_margin_overall, opt_fragile_overall
+
+
+def certify_single_node_global(adj, alpha, fragile, local_budget, global_budget, logits, true_class, target, upper_bounds):
+    """
+    Computes the certificate for a single node using the relaxed QCLP formulation.
+
+    Parameters
+    ----------
+    adj : sp.spmatrix, shape [n, n]
+        Sparse adjacency matrix.
+    alpha : float
+        (1-alpha) teleport[v] is the probability to teleport to node v.
+    fragile : np.ndarray, shape [?, 2]
+        Fragile edges that are under our control.
+    local_budget : np.ndarray, shape [n]
+        Maximum number of local flips per node.
+    global_budget : int
+        Maximum number of global flips.
+    logits : np.ndarray, shape [n, k]
+        A matrix of logits. Each row corresponds to one node.
+    true_class : int
+        The reference class, i.e. y_t in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+    target : int
+        The node we want to certify.
+    upper_bounds : np.ndarray, shape [n]
+        Upper bound for the values of x_i.
+
+    Returns
+    -------
+    worst_margin : float
+        The value of the worst-case margin.
+        The node is certifiably robust if this is positive. Otherwise we have found an adversarial example.
+    opt_fragile : np.ndarray, shape [?, 2]
+        Optimal fragile edges.
+    """
+
+    worst_margin_overall = np.inf
+    opt_fragile_overall = None
+
+    nc = logits.shape[1]
+
+    # iterate over all other classes
+    for other_class in range(nc):
+        if other_class != true_class:
+            # min(true - other_class) = -max(other_class-true_class)
+            reward = logits[:, other_class] - logits[:, true_class]
+
+            # set teleport vector to the target node
+            teleport = np.zeros_like(reward)
+            teleport[target] = 1
+
+            _, opt_fragile, obj_value, _ = relaxed_qclp(
+                adj=adj, alpha=alpha, fragile=fragile, local_budget=local_budget,
+                         reward=reward, teleport=teleport, global_budget=global_budget, upper_bounds=upper_bounds)
+            # multiply by -1 since we care about minimization
             worst_margin = -obj_value
             if worst_margin < worst_margin_overall:
                 worst_margin_overall = worst_margin
