@@ -14,6 +14,7 @@ Preliminary reference implementation.
 
 ## Demo
 See the notebook `Local Budget Demo.ipynb` for a demo on how to compute the certificate for local budget only. 
+See the notebook `Adversarial Training Demo.ipynb` for a demo comparing the different training schemes. 
 
 ## Cite
 Please cite our paper if you use this code in your own work:
