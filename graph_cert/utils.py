@@ -8,6 +8,7 @@ Copyright (C) owned by the authors, 2019
 import numba
 import numpy as np
 import scipy.sparse as sp
+import scipy.linalg as spl
 
 
 @numba.jit(nopython=True)
@@ -94,7 +95,7 @@ def flip_edges(adj, edges):
     return adj_flipped
 
 
-def propagation_matrix(adj, alpha=0.85, sigma=1):
+def propagation_matrix(adj, alpha=0.85, sigma=1, nodes=None):
     """
     Computes the propagation matrix  (1-alpha)(I - alpha D^{-sigma} A D^{sigma-1})^{-1}.
 
@@ -107,21 +108,27 @@ def propagation_matrix(adj, alpha=0.85, sigma=1):
     sigma
         Hyper-parameter controlling the propagation style.
         Set sigma=1 to obtain the PPR matrix.
+    nodes : np.ndarray, shape [?]
+        Nodes for which we want to compute Personalized PageRank.
     Returns
     -------
     prop_matrix : np.ndarray, shape [n, n]
         Propagation matrix.
 
     """
+    n = adj.shape[0]
     deg = adj.sum(1).A1
+
     deg_min_sig = sp.diags(np.power(deg, -sigma))
     deg_sig_min = sp.diags(np.power(deg, sigma - 1))
-
-    n = adj.shape[0]
     pre_inv = sp.eye(n) - alpha * deg_min_sig @ adj @ deg_sig_min
 
-    prop_matrix = (1 - alpha) * np.linalg.inv(pre_inv.toarray())
-    return prop_matrix
+    # solve for x in: pre_inx @ x = b
+    b = np.eye(n)
+    if nodes is not None:
+        b = b[:, nodes]
+
+    return (1 - alpha) * spl.solve(pre_inv.toarray().T, b).T
 
 
 def correction_term(adj, opt_fragile, fragile):
@@ -296,7 +303,7 @@ def load_dataset(file_name):
 
 def standardize(adj_matrix, labels):
     """
-     Make the graph undirected and select only the nodes belonging to the largest connected component.
+    Make the graph undirected and select only the nodes belonging to the largest connected component.
     Parameters
     ----------
     adj_matrix : sp.spmatrix
@@ -336,3 +343,43 @@ def standardize(adj_matrix, labels):
 
     return standardized_adj_matrix, standardized_labels
 
+
+def split(labels, n_per_class=20, seed=0):
+    """
+    Randomly split the training data.
+
+    Parameters
+    ----------
+    labels: array-like [n_nodes]
+        The class labels
+    n_per_class : int
+        Number of samples per class
+    seed: int
+        Seed
+
+    Returns
+    -------
+    split_train: array-like [n_per_class * nc]
+        The indices of the training nodes
+    split_val: array-like [n_per_class * nc]
+        The indices of the validation nodes
+    split_test array-like [n_nodes - 2*n_per_class * nc]
+        The indices of the test nodes
+    """
+    np.random.seed(seed)
+    nc = labels.max() + 1
+
+    split_train, split_val = [], []
+    for l in range(nc):
+        perm = np.random.permutation((labels == l).nonzero()[0])
+        split_train.append(perm[:n_per_class])
+        split_val.append(perm[n_per_class:2 * n_per_class])
+
+    split_train = np.random.permutation(np.concatenate(split_train))
+    split_val = np.random.permutation(np.concatenate(split_val))
+
+    assert split_train.shape[0] == split_val.shape[0] == n_per_class * nc
+
+    split_test = np.setdiff1d(np.arange(len(labels)), np.concatenate((split_train, split_val)))
+
+    return split_train, split_val, split_test

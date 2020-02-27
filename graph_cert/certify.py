@@ -311,7 +311,7 @@ def upper_bounds_max_ppr_all_nodes(adj, alpha, fragile, local_budget, do_paralle
     return upper_bounds
 
 
-def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, other_class):
+def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, other_class, nodes=None):
     """
     Computes the worst margin and the optimal edges to perturb between any two classes given a graph, a set of fragile
     edges and local budgets per node, i.e. it solve min_g [(pi_g)^T (logits_true_class - logits_other_class)].
@@ -334,6 +334,8 @@ def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, ot
         The reference class, i.e. y_t in m^*_{y_t, c}(t) (see Eq.3 in the paper)
     other_class : int
         The other class, i.e. c in m^*_{y_t, c}(t) (see Eq.3 in the paper)
+    nodes : np.ndarray, shape [?]
+        Nodes for which we want to compute Personalized PageRank.
 
     Returns
     -------
@@ -357,12 +359,12 @@ def worst_margin_local(adj, alpha, fragile, local_budget, logits, true_class, ot
     # constructed the graph perturbed with the optimal fragile edges
     adj_flipped = flip_edges(adj, opt_fragile)
     # compute the PageRank matrix
-    ppr_flipped = propagation_matrix(adj=adj_flipped, alpha=alpha)
+    ppr_flipped = propagation_matrix(adj=adj_flipped, alpha=alpha, nodes=nodes)
 
     return true_class, other_class, ppr_flipped
 
 
-def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
+def k_squared_parallel(adj, alpha, fragile, local_budget, logits, nodes=None):
     """
     Computes the worst margin and the optimal edges to perturb for all K x K pairs of classes, since we can recover
     the exact worst-case margins for all node via the PageRank matrix of the perturbed graphs. See section 4.3. in the
@@ -380,25 +382,28 @@ def k_squared_parallel(adj, alpha, fragile, local_budget, logits):
         Maximum number of local flips per node.
     logits : np.ndarray, shape [n, k]
         A matrix of logits. Each row corresponds to one node.
+    nodes : np.ndarray, shape [?]
+        Nodes for which we want to compute Personalized PageRank.
 
     Returns
     -------
-    k_squared_pageranks : dict(int, int) = np.ndarray, shape [n, n]
-        Dictionary containing the PageRank matrices of the perturbed graphs for all k x k paris of classes.
+    k_squared_pageranks : np.ndarray, shape [k, k, len(nodes), n]
+        PageRank vectors of the perturbed graphs for all k x k pairs of classes.
     """
     parallel = Parallel(20)
 
     n, nc = logits.shape
 
     results = parallel(delayed(worst_margin_local)(
-        adj, alpha, fragile, local_budget, logits, c1, c2)
+        adj, alpha, fragile, local_budget, logits, c1, c2, nodes)
                        for c1 in range(nc)
                        for c2 in range(nc)
                        if c1 != c2)
 
-    k_squared_pageranks = {}
+    n_nodes = n if nodes is None else len(nodes)
+    k_squared_pageranks = np.zeros((nc, nc, n_nodes, n))
     for c1, c2, ppr_flipped in results:
-        k_squared_pageranks[(c1, c2)] = {'ppr': ppr_flipped}
+        k_squared_pageranks[c1, c2] = ppr_flipped
 
     return k_squared_pageranks
 
@@ -422,15 +427,16 @@ def worst_margins_given_k_squared(k_squared_pageranks, labels, logits):
         The value of the worst-case margin for each node.
     """
     n, nc = logits.shape
-    worst_margins_all = np.ones((nc, nc, n)) * np.inf
+    n_nodes = k_squared_pageranks.shape[2]
+    worst_margins_all = np.ones((nc, nc, n_nodes)) * np.inf
 
     for c1 in range(nc):
         for c2 in range(nc):
             if c1 != c2:
-                worst_margins_all[c1, c2] = (k_squared_pageranks[c1, c2]['ppr'] @ (logits[:, c1] - logits[:, c2]))
+                worst_margins_all[c1, c2] = k_squared_pageranks[c1, c2] @ (logits[:, c1] - logits[:, c2])
 
     # selected the reference label according to the labels vector and find the minimum among all other classes
-    worst_margins = np.nanmin(worst_margins_all[labels, :, np.arange(n)], 1)
+    worst_margins = np.nanmin(worst_margins_all[labels, :, np.arange(n_nodes)], 1)
 
     return worst_margins
 
