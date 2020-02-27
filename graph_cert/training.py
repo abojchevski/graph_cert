@@ -107,7 +107,7 @@ def train(model, attr, ppr, labels, idx_train, idx_val,
 
         if it % display_step == 0:
             print(f'Epoch {it:4}: loss_train: {loss_train.item():.5f}, loss_val: {loss_val.item():.5f} '
-                  f' acc_train: {acc_train:.5f}, acc_val: {acc_val:.5f} p_robust {p_robust}'
+                  f' acc_train: {acc_train:.5f}, acc_val: {acc_val:.5f} p_robust {p_robust:.5f}'
                   )
 
     # restore the best validation state
@@ -196,7 +196,7 @@ def cem_loss(diffused_logits, adv_logits, labels, margin):
         Robust hinge loss.
     """
     hinge_loss_per_instance = torch.max(margin - adv_logits, torch.zeros_like(adv_logits)).sum(1) - margin
-    loss_train = F.cross_entropy(diffused_logits, labels, reduce=False) + hinge_loss_per_instance
+    loss_train = F.cross_entropy(diffused_logits, labels, reduction='none') + hinge_loss_per_instance
     return loss_train.mean()
 
 

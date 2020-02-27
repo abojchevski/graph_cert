@@ -273,41 +273,31 @@ def load_dataset(file_name):
         file_name += '.npz'
     with np.load(file_name, allow_pickle=True) as loader:
         loader = dict(loader)
-        adj_matrix = sp.csr_matrix((loader['adj_data'], loader['adj_indices'],
-                                    loader['adj_indptr']), shape=loader['adj_shape'])
+        adj_matrix = sp.csr_matrix((loader['adj_matrix.data'], loader['adj_matrix.indices'],
+                                    loader['adj_matrix.indptr']), shape=loader['adj_matrix.shape'])
+
+        attr_matrix = sp.csr_matrix((loader['attr_matrix.data'], loader['attr_matrix.indices'],
+                                    loader['attr_matrix.indptr']), shape=loader['attr_matrix.shape'])
 
         labels = loader.get('labels')
 
         graph = {
             'adj_matrix': adj_matrix,
+            'attr_matrix': attr_matrix,
             'labels': labels
         }
-
-        idx_to_node = loader.get('idx_to_node')
-        if idx_to_node:
-            idx_to_node = idx_to_node.tolist()
-            graph['idx_to_node'] = idx_to_node
-
-        idx_to_attr = loader.get('idx_to_attr')
-        if idx_to_attr:
-            idx_to_attr = idx_to_attr.tolist()
-            graph['idx_to_attr'] = idx_to_attr
-
-        idx_to_class = loader.get('idx_to_class')
-        if idx_to_class:
-            idx_to_class = idx_to_class.tolist()
-            graph['idx_to_class'] = idx_to_class
-
         return graph
 
 
-def standardize(adj_matrix, labels):
+def standardize(adj_matrix, attr_matrix, labels):
     """
     Make the graph undirected and select only the nodes belonging to the largest connected component.
     Parameters
     ----------
     adj_matrix : sp.spmatrix
         Sparse adjacency matrix
+    attr_matrix : sp.spmatrix
+        Sparse attribute matrix
     labels : array-like, shape [n]
         Node labels.
 
@@ -315,6 +305,8 @@ def standardize(adj_matrix, labels):
     -------
     standardized_adj_matrix: sp.spmatrix
         Standardized sparse adjacency matrix.
+    standardized_attr_matrix: sp.spmatrix
+        Standardized sparse attribute matrix.
     standardized_labels: array-like, shape [?]
         Labels for the selected nodes.
     """
@@ -332,8 +324,10 @@ def standardize(adj_matrix, labels):
     c_ids, c_counts = np.unique(components, return_counts=True)
     id_max_component = c_ids[c_counts.argmax()]
     select = components == id_max_component
+
     standardized_adj_matrix = standardized_adj_matrix[select][:, select]
     standardized_labels = labels[select]
+    standardized_attr_matrix = attr_matrix[select]
 
     # remove self-loops
     standardized_adj_matrix = standardized_adj_matrix.tolil()
@@ -341,7 +335,7 @@ def standardize(adj_matrix, labels):
     standardized_adj_matrix = standardized_adj_matrix.tocsr()
     standardized_adj_matrix.eliminate_zeros()
 
-    return standardized_adj_matrix, standardized_labels
+    return standardized_adj_matrix, standardized_attr_matrix, standardized_labels
 
 
 def split(labels, n_per_class=20, seed=0):
