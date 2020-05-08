@@ -56,22 +56,25 @@ def policy_iteration(adj, alpha, fragile, local_budget, reward, teleport, max_it
     if not isinstance(local_budget, np.ndarray):
         local_budget = np.repeat(local_budget, n)
 
-    # does standard value iteration
+    eye = sp.eye(n)
+    ri = reward[fragile[:, 0]]
+       
+    # +1 if we are adding a node, -1 if we are removing a node
+    add_rem_multiplier = 1 - 2 * adj[fragile[:, 0], fragile[:, 1]].A1
+
+    # does standard policy iteration
     for it in range(max_iter):
         adj_flipped = flip_edges(adj, cur_fragile)
 
         # compute the mean reward before teleportation
         trans_flipped = sp.diags(1 / adj_flipped.sum(1).A1) @ adj_flipped
-        mean_reward = gmres(sp.eye(n) - alpha * trans_flipped, reward)[0]
+        mean_reward = gmres(eye - alpha * trans_flipped, reward)[0]
 
         # compute the change in the mean reward
         vi = mean_reward[fragile[:, 0]]
         vj = mean_reward[fragile[:, 1]]
-        ri = reward[fragile[:, 0]]
         change = vj - ((vi - ri) / alpha)
 
-        # +1 if we are adding a node, -1 if we are removing a node
-        add_rem_multiplier = 1 - 2 * adj[fragile[:, 0], fragile[:, 1]].A1
         change = change * add_rem_multiplier
 
         # only consider the ones that improve our objective function
